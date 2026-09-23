@@ -1,0 +1,15 @@
+for (var item in "apple" "banana" "cherry") {
+    out item;
+}
+
+for (var i = 0; i < 3; i = i + 1) {
+    out i;
+}
+
+func loopTest() {
+    for (var j in 1 2) {
+        out j;
+    }
+}
+
+loopTest();

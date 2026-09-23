@@ -1,3 +1,4 @@
+import re
 from modules.core.nodes import (
     VarDecl,
     OutStmt,
@@ -5,6 +6,10 @@ from modules.core.nodes import (
     FuncDef,
     ClassDef,
     Comment,
+    CondExpr,
+    IfStmt,
+    ForInStmt,
+    ForCStyleStmt,
 )
 
 
@@ -57,6 +62,26 @@ class TypeChecker:
             if name in scope:
                 return scope[name]
         return None
+
+    def check_condition(self, cond: CondExpr):
+        if cond.left_is_ref:
+            if not self.lookup(cond.left):
+                raise DSLVibeError(
+                    f"undefined token '{cond.left}'",
+                    cond.line,
+                    cond.left_col,
+                    self.file_path,
+                    self.code,
+                )
+        if cond.right_is_ref:
+            if not self.lookup(cond.right):
+                raise DSLVibeError(
+                    f"undefined token '{cond.right}'",
+                    cond.line,
+                    cond.right_col,
+                    self.file_path,
+                    self.code,
+                )
 
     def check(self, nodes):
         for node in nodes:
@@ -153,4 +178,75 @@ class TypeChecker:
                     self.scopes.append({**self.current_scope(), **method_scope})
                     self.check(method.body)
                     self.scopes.pop()
+                self.scopes.pop()
+
+            elif isinstance(node, IfStmt):
+                self.check_condition(node.then_branch.condition)
+                self.scopes.append({})
+                self.check(node.then_branch.body)
+                self.scopes.pop()
+
+                for elif_branch in node.elif_branches:
+                    self.check_condition(elif_branch.condition)
+                    self.scopes.append({})
+                    self.check(elif_branch.body)
+                    self.scopes.pop()
+
+                if node.else_body:
+                    self.scopes.append({})
+                    self.check(node.else_body)
+                    self.scopes.pop()
+
+            elif isinstance(node, ForInStmt):
+                if node.is_decl:
+                    if self.lookup(node.var_name):
+                        raise DSLVibeError(
+                            f"duplicate definition of '{node.var_name}'",
+                            node.line,
+                            node.var_col,
+                            self.file_path,
+                            self.code,
+                        )
+                else:
+                    if not self.lookup(node.var_name):
+                        raise DSLVibeError(
+                            f"undefined token '{node.var_name}'",
+                            node.line,
+                            node.var_col,
+                            self.file_path,
+                            self.code,
+                        )
+
+                for val, col, is_ref in zip(node.items, node.item_cols, node.item_is_ref):
+                    if is_ref and not self.lookup(val):
+                        raise DSLVibeError(
+                            f"undefined token '{val}'",
+                            node.line,
+                            col,
+                            self.file_path,
+                            self.code,
+                        )
+
+                loop_scope = {node.var_name: "VAR"}
+                self.scopes.append(loop_scope)
+                self.check(node.body)
+                self.scopes.pop()
+
+            elif isinstance(node, ForCStyleStmt):
+                self.scopes.append({})
+                self.check([node.init])
+                self.check_condition(node.condition)
+
+                tokens = re.findall(r"[a-zA-Z_]\w*", node.step_expr)
+                for tok in tokens:
+                    if not self.lookup(tok):
+                        raise DSLVibeError(
+                            f"undefined token '{tok}'",
+                            node.line,
+                            node.col,
+                            self.file_path,
+                            self.code,
+                        )
+
+                self.check(node.body)
                 self.scopes.pop()

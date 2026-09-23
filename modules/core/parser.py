@@ -7,6 +7,11 @@ from modules.core.nodes import (
     ClassDef,
     Comment,
     MethodDef,
+    CondExpr,
+    IfBranch,
+    IfStmt,
+    ForInStmt,
+    ForCStyleStmt,
 )
 
 
@@ -19,6 +24,11 @@ class Parser:
     def peek(self) -> Token | None:
         if self.pos < len(self.tokens):
             return self.tokens[self.pos]
+        return None
+
+    def peek_next(self) -> Token | None:
+        if self.pos + 1 < len(self.tokens):
+            return self.tokens[self.pos + 1]
         return None
 
     def consume(self, expected_type: str = None) -> Token:
@@ -70,6 +80,10 @@ class Parser:
                 return node
             elif token.value == "class":
                 return self.parse_class_def()
+            elif token.value == "if":
+                return self.parse_if()
+            elif token.value == "for":
+                return self.parse_for()
             elif token.value == "run":
                 self.consume("IDENT")
                 return self.parse_run(force_run=True)
@@ -236,6 +250,222 @@ class Parser:
             self.consume("SEMICOLON")
 
         return RunStmt(line, col, exec_name, args, arg_cols, arg_is_ref=arg_is_ref)
+
+    def parse_condition(self) -> CondExpr:
+        left_tok = self.consume()
+        left = left_tok.value
+        left_col = left_tok.col
+        left_is_ref = (left_tok.type == "IDENT")
+
+        op_tok = self.peek()
+        if op_tok and op_tok.type in ["EQ", "NE", "LE", "GE", "LT", "GT", "ASSIGN"]:
+            op = self.consume().value
+            right_tok = self.consume()
+            right = right_tok.value
+            right_col = right_tok.col
+            right_is_ref = (right_tok.type == "IDENT")
+            return CondExpr(
+                line=left_tok.line,
+                col=left_tok.col,
+                left=left,
+                left_col=left_col,
+                left_is_ref=left_is_ref,
+                op=op,
+                right=right,
+                right_col=right_col,
+                right_is_ref=right_is_ref,
+            )
+        else:
+            return CondExpr(
+                line=left_tok.line,
+                col=left_tok.col,
+                left=left,
+                left_col=left_col,
+                left_is_ref=left_is_ref,
+            )
+
+    def parse_if(self) -> IfStmt:
+        if_tok = self.consume("IDENT")
+        line, col = if_tok.line, if_tok.col
+        self.consume("OPAR")
+        then_cond = self.parse_condition()
+        self.consume("CPAR")
+        self.consume("OBRACE")
+        then_body = []
+        while self.peek() and self.peek().type != "CBRACE":
+            stmt = self.parse_statement()
+            if stmt:
+                then_body.append(stmt)
+        self.consume("CBRACE")
+        then_branch = IfBranch(
+            line=then_cond.line,
+            col=then_cond.col,
+            condition=then_cond,
+            body=then_body,
+        )
+
+        elif_branches = []
+        while True:
+            t = self.peek()
+            if t and t.type == "IDENT" and t.value == "else":
+                next_t = self.peek_next()
+                if next_t and next_t.type == "IDENT" and next_t.value == "if":
+                    self.consume("IDENT")
+                    self.consume("IDENT")
+                    self.consume("OPAR")
+                    elif_cond = self.parse_condition()
+                    self.consume("CPAR")
+                    self.consume("OBRACE")
+                    elif_body = []
+                    while self.peek() and self.peek().type != "CBRACE":
+                        stmt = self.parse_statement()
+                        if stmt:
+                            elif_body.append(stmt)
+                    self.consume("CBRACE")
+                    elif_branches.append(
+                        IfBranch(
+                            line=elif_cond.line,
+                            col=elif_cond.col,
+                            condition=elif_cond,
+                            body=elif_body,
+                        )
+                    )
+                else:
+                    break
+            else:
+                break
+
+        else_body = []
+        t = self.peek()
+        if t and t.type == "IDENT" and t.value == "else":
+            self.consume("IDENT")
+            self.consume("OBRACE")
+            while self.peek() and self.peek().type != "CBRACE":
+                stmt = self.parse_statement()
+                if stmt:
+                    else_body.append(stmt)
+            self.consume("CBRACE")
+
+        return IfStmt(
+            line=line,
+            col=col,
+            then_branch=then_branch,
+            elif_branches=elif_branches,
+            else_body=else_body,
+        )
+
+    def parse_for(self) -> ForInStmt | ForCStyleStmt:
+        for_tok = self.consume("IDENT")
+        line, col = for_tok.line, for_tok.col
+        self.consume("OPAR")
+
+        is_c_style = False
+        scan_pos = self.pos
+        paren_count = 1
+        while scan_pos < len(self.tokens) and paren_count > 0:
+            t = self.tokens[scan_pos]
+            if t.type == "OPAR":
+                paren_count += 1
+            elif t.type == "CPAR":
+                paren_count -= 1
+            elif t.type == "SEMICOLON" and paren_count == 1:
+                is_c_style = True
+            scan_pos += 1
+
+        if not is_c_style:
+            is_decl = False
+            if self.peek() and self.peek().type == "IDENT" and self.peek().value == "var":
+                self.consume("IDENT")
+                is_decl = True
+            var_token = self.consume("IDENT")
+            var_name, var_col = var_token.value, var_token.col
+
+            in_tok = self.peek()
+            if not in_tok or in_tok.type != "IDENT" or in_tok.value != "in":
+                raise SyntaxError(
+                    f"Line {var_token.line}, Col {var_token.col}: Expected 'in' in for loop"
+                )
+            self.consume("IDENT")
+
+            items, item_cols, item_is_ref = [], [], []
+            while self.peek() and self.peek().type != "CPAR":
+                t = self.peek()
+                items.append(t.value)
+                item_cols.append(t.col)
+                item_is_ref.append(t.type == "IDENT")
+                self.consume()
+            self.consume("CPAR")
+            self.consume("OBRACE")
+            body = []
+            while self.peek() and self.peek().type != "CBRACE":
+                stmt = self.parse_statement()
+                if stmt:
+                    body.append(stmt)
+            self.consume("CBRACE")
+
+            return ForInStmt(
+                line=line,
+                col=col,
+                var_name=var_name,
+                var_col=var_col,
+                is_decl=is_decl,
+                is_local=self.in_func,
+                items=items,
+                item_cols=item_cols,
+                item_is_ref=item_is_ref,
+                body=body,
+            )
+        else:
+            is_decl = False
+            if self.peek() and self.peek().type == "IDENT" and self.peek().value == "var":
+                self.consume("IDENT")
+                is_decl = True
+            var_token = self.consume("IDENT")
+            name, name_col = var_token.value, var_token.col
+            self.consume("ASSIGN")
+            val_token = self.peek()
+            val, val_col = val_token.value, val_token.col
+            self.consume()
+            is_ref = (val_token.type == "IDENT")
+            vtype = "INT" if val_token.type == "NUMBER" else "STRING"
+            init_node = VarDecl(
+                line=line,
+                col=col,
+                name=name,
+                name_col=name_col,
+                value=val,
+                value_col=val_col,
+                value_type=vtype,
+                is_local=self.in_func,
+                is_ref=is_ref,
+            )
+            self.consume("SEMICOLON")
+            cond_node = self.parse_condition()
+            self.consume("SEMICOLON")
+
+            step_tokens = []
+            while self.peek() and self.peek().type != "CPAR":
+                step_tokens.append(self.consume().value)
+            step_str = " ".join(step_tokens)
+            self.consume("CPAR")
+
+            self.consume("OBRACE")
+            body = []
+            while self.peek() and self.peek().type != "CBRACE":
+                stmt = self.parse_statement()
+                if stmt:
+                    body.append(stmt)
+            self.consume("CBRACE")
+
+            return ForCStyleStmt(
+                line=line,
+                col=col,
+                init=init_node,
+                condition=cond_node,
+                step_var=name,
+                step_expr=step_str,
+                body=body,
+            )
 
     def parse_all(self):
         nodes = []

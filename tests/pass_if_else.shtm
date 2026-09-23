@@ -1,0 +1,15 @@
+var x = 10;
+if (x == 10) {
+    out "x is 10";
+} else if (x == 5) {
+    out "x is 5";
+} else {
+    out "x is something else";
+}
+
+var name = "alice";
+if (name == "alice") {
+    out "hello alice";
+} else {
+    out "hello stranger";
+}

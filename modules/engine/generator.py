@@ -1,4 +1,38 @@
-from modules.core.nodes import VarDecl, OutStmt, RunStmt, FuncDef, ClassDef, Comment
+from modules.core.nodes import (
+    VarDecl,
+    OutStmt,
+    RunStmt,
+    FuncDef,
+    ClassDef,
+    Comment,
+    CondExpr,
+    IfStmt,
+    ForInStmt,
+    ForCStyleStmt,
+)
+
+
+def format_cond(cond: CondExpr) -> str:
+    left_val = f"${cond.left}" if cond.left_is_ref else cond.left
+    if cond.op is None:
+        return f'[ -n "{left_val}" ]'
+
+    right_val = f"${cond.right}" if cond.right_is_ref else cond.right
+
+    l_str = f'"{left_val}"' if cond.left_is_ref else cond.left
+    r_str = f'"{right_val}"' if cond.right_is_ref else cond.right
+
+    op_map = {
+        "==": "=",
+        "=": "=",
+        "!=": "!=",
+        "<": "-lt",
+        "<=": "-le",
+        ">": "-gt",
+        ">=": "-ge",
+    }
+    op_str = op_map.get(cond.op, cond.op)
+    return f"[ {l_str} {op_str} {r_str} ]"
 
 
 def generate_bash(nodes, skip_cleanup=False) -> str:
@@ -88,6 +122,94 @@ def generate_bash(nodes, skip_cleanup=False) -> str:
                     if line:
                         lines.append(f"  {line}")
                 lines.append("}")
+
+        elif isinstance(node, IfStmt):
+            cond_str = format_cond(node.then_branch.condition)
+            lines.append(f"if {cond_str}; then")
+
+            old_called = getattr(generate_bash, "called", False)
+            generate_bash.called = True
+            then_code = generate_bash(node.then_branch.body, skip_cleanup=True)
+            generate_bash.called = old_called
+
+            for line in then_code.split("\n"):
+                if line:
+                    lines.append(f"  {line}")
+
+            for elif_branch in node.elif_branches:
+                elif_cond_str = format_cond(elif_branch.condition)
+                lines.append(f"elif {elif_cond_str}; then")
+                generate_bash.called = True
+                elif_code = generate_bash(elif_branch.body, skip_cleanup=True)
+                generate_bash.called = old_called
+                for line in elif_code.split("\n"):
+                    if line:
+                        lines.append(f"  {line}")
+
+            if node.else_body:
+                lines.append("else")
+                generate_bash.called = True
+                else_code = generate_bash(node.else_body, skip_cleanup=True)
+                generate_bash.called = old_called
+                for line in else_code.split("\n"):
+                    if line:
+                        lines.append(f"  {line}")
+
+            lines.append("fi")
+
+        elif isinstance(node, ForInStmt):
+            if node.is_decl and node.is_local:
+                lines.append(f"local {node.var_name}")
+            elif node.is_decl and not node.is_local:
+                globals_to_unset.append(node.var_name)
+
+            items_str = " ".join(
+                [f"${it}" if ref else it for it, ref in zip(node.items, node.item_is_ref)]
+            )
+            lines.append(f"for {node.var_name} in {items_str}; do")
+
+            old_called = getattr(generate_bash, "called", False)
+            generate_bash.called = True
+            body_code = generate_bash(node.body, skip_cleanup=True)
+            generate_bash.called = old_called
+
+            for line in body_code.split("\n"):
+                if line:
+                    lines.append(f"  {line}")
+
+            lines.append("done")
+
+        elif isinstance(node, ForCStyleStmt):
+            if node.init.is_local:
+                lines.append(f"local {node.init.name}={node.init.value}")
+            else:
+                lines.append(f"{node.init.name}={node.init.value}")
+                globals_to_unset.append(node.init.name)
+
+            cond_str = format_cond(node.condition)
+            lines.append(f"while {cond_str}; do")
+
+            old_called = getattr(generate_bash, "called", False)
+            generate_bash.called = True
+            body_code = generate_bash(node.body, skip_cleanup=True)
+            generate_bash.called = old_called
+
+            for line in body_code.split("\n"):
+                if line:
+                    lines.append(f"  {line}")
+
+            step_s = node.step_expr.strip()
+            if "=" in step_s:
+                parts = step_s.split("=", 1)
+                lines.append(f"  {parts[0].strip()}=$(( {parts[1].strip()} ))")
+            elif "++" in step_s:
+                v = step_s.replace("+", "").strip()
+                lines.append(f"  {v}=$(( {v} + 1 ))")
+            elif "--" in step_s:
+                v = step_s.replace("-", "").strip()
+                lines.append(f"  {v}=$(( {v} - 1 ))")
+
+            lines.append("done")
 
     if globals_to_unset and not skip_cleanup:
         lines.append("# Cleanup: Localizing script-level variables")

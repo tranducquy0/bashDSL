@@ -94,8 +94,7 @@ class Parser:
             return self.parse_run()
 
         raise SyntaxError(
-            f"Line {token.line}, Col {token.col}: "
-            f"Unexpected token '{token.value}'"
+            f"Line {token.line}, Col {token.col}: Unexpected token '{token.value}'"
         )
 
     def parse_var_decl(self):
@@ -129,7 +128,11 @@ class Parser:
         line, col = token.line, token.col
         self.consume("IDENT")
         values, val_cols, types, refs = [], [], [], []
-        while self.peek() and self.peek().type not in ["SEMICOLON", "CBRACE", "NEWLINE"]:
+        while self.peek() and self.peek().type not in [
+            "SEMICOLON",
+            "CBRACE",
+            "NEWLINE",
+        ]:
             val_token = self.peek()
             values.append(val_token.value)
             val_cols.append(val_token.col)
@@ -255,7 +258,7 @@ class Parser:
         left_tok = self.consume()
         left = left_tok.value
         left_col = left_tok.col
-        left_is_ref = (left_tok.type == "IDENT")
+        left_is_ref = left_tok.type == "IDENT"
 
         op_tok = self.peek()
         if op_tok and op_tok.type in ["EQ", "NE", "LE", "GE", "LT", "GT", "ASSIGN"]:
@@ -263,7 +266,7 @@ class Parser:
             right_tok = self.consume()
             right = right_tok.value
             right_col = right_tok.col
-            right_is_ref = (right_tok.type == "IDENT")
+            right_is_ref = right_tok.type == "IDENT"
             return CondExpr(
                 line=left_tok.line,
                 col=left_tok.col,
@@ -374,7 +377,11 @@ class Parser:
 
         if not is_c_style:
             is_decl = False
-            if self.peek() and self.peek().type == "IDENT" and self.peek().value == "var":
+            if (
+                self.peek()
+                and self.peek().type == "IDENT"
+                and self.peek().value == "var"
+            ):
                 self.consume("IDENT")
                 is_decl = True
             var_token = self.consume("IDENT")
@@ -417,7 +424,11 @@ class Parser:
             )
         else:
             is_decl = False
-            if self.peek() and self.peek().type == "IDENT" and self.peek().value == "var":
+            if (
+                self.peek()
+                and self.peek().type == "IDENT"
+                and self.peek().value == "var"
+            ):
                 self.consume("IDENT")
                 is_decl = True
             var_token = self.consume("IDENT")
@@ -426,7 +437,7 @@ class Parser:
             val_token = self.peek()
             val, val_col = val_token.value, val_token.col
             self.consume()
-            is_ref = (val_token.type == "IDENT")
+            is_ref = val_token.type == "IDENT"
             vtype = "INT" if val_token.type == "NUMBER" else "STRING"
             init_node = VarDecl(
                 line=line,

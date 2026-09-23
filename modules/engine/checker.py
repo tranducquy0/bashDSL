@@ -217,7 +217,9 @@ class TypeChecker:
                             self.code,
                         )
 
-                for val, col, is_ref in zip(node.items, node.item_cols, node.item_is_ref):
+                for val, col, is_ref in zip(
+                    node.items, node.item_cols, node.item_is_ref
+                ):
                     if is_ref and not self.lookup(val):
                         raise DSLVibeError(
                             f"undefined token '{val}'",

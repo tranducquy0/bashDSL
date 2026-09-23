@@ -94,7 +94,7 @@ def generate_bash(nodes, skip_cleanup=False) -> str:
                 lines.append(f"# Public Function: {node.name}")
             lines.append(f"{node.name}() {{")
             for i, arg in enumerate(node.args):
-                lines.append(f"  local {arg}=\"${i+1}\"")
+                lines.append(f'  local {arg}="${i + 1}"')
 
             old_called = getattr(generate_bash, "called", False)
             generate_bash.called = True
@@ -113,7 +113,7 @@ def generate_bash(nodes, skip_cleanup=False) -> str:
             for method in node.methods:
                 lines.append(f"{node.name}:{method.name}() {{")
                 for i, arg in enumerate(method.args):
-                    lines.append(f"  local {arg}=\"${i+1}\"")
+                    lines.append(f'  local {arg}="${i + 1}"')
                 old_called = getattr(generate_bash, "called", False)
                 generate_bash.called = True
                 body_code = generate_bash(method.body, skip_cleanup=True)
@@ -164,7 +164,10 @@ def generate_bash(nodes, skip_cleanup=False) -> str:
                 globals_to_unset.append(node.var_name)
 
             items_str = " ".join(
-                [f"${it}" if ref else it for it, ref in zip(node.items, node.item_is_ref)]
+                [
+                    f"${it}" if ref else it
+                    for it, ref in zip(node.items, node.item_is_ref)
+                ]
             )
             lines.append(f"for {node.var_name} in {items_str}; do")
 

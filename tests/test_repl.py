@@ -2,26 +2,27 @@ import subprocess
 import sys
 import os
 
+
 def test_repl_session():
     print("Testing REPL interactive session...")
-    
-    main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
-    
+
+    main_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../"))
+
     process = subprocess.Popen(
-        [sys.executable, '-m', 'modules.cli.main'],
+        [sys.executable, "-m", "modules.cli.main"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        cwd=main_path
+        cwd=main_path,
     )
 
     commands = [
         "var x = 42;",
         "out x;",
-        "func hello() { out \"hi\"; }",
+        'func hello() { out "hi"; }',
         "hello();",
-        "exit"
+        "exit",
     ]
 
     full_input = "\n".join(commands) + "\n"
@@ -36,6 +37,7 @@ def test_repl_session():
 
     print("REPL session test PASSED")
     return True
+
 
 if __name__ == "__main__":
     if test_repl_session():

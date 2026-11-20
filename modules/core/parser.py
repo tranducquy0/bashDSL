@@ -80,8 +80,7 @@ class Parser:
             return self.parse_run()
 
         raise SyntaxError(
-            f"Line {token.line}, Col {token.col}: "
-            f"Unexpected token '{token.value}'"
+            f"Line {token.line}, Col {token.col}: Unexpected token '{token.value}'"
         )
 
     def parse_var_decl(self):
@@ -115,7 +114,11 @@ class Parser:
         line, col = token.line, token.col
         self.consume("IDENT")
         values, val_cols, types, refs = [], [], [], []
-        while self.peek() and self.peek().type not in ["SEMICOLON", "CBRACE", "NEWLINE"]:
+        while self.peek() and self.peek().type not in [
+            "SEMICOLON",
+            "CBRACE",
+            "NEWLINE",
+        ]:
             val_token = self.peek()
             values.append(val_token.value)
             val_cols.append(val_token.col)

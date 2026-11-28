@@ -32,7 +32,9 @@ class TestRunner:
         if repl_result.returncode == 0:
             print("PASS: REPL Session Test")
         else:
-            print(f"FAIL: REPL Session Test\n{repl_result.stdout}\n{repl_result.stderr}")
+            print(
+                f"FAIL: REPL Session Test\n{repl_result.stdout}\n{repl_result.stderr}"
+            )
             failed += 1
 
         if failed > 0:
